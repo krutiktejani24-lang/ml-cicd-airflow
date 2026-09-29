@@ -1,0 +1,16 @@
+# Runs Airflow (standalone mode, SQLite) with this project mounted inside.
+services:
+  airflow:
+    image: apache/airflow:2.9.3
+    command: standalone
+    user: "${AIRFLOW_UID:-50000}:0"
+    ports:
+      - "8080:8080"
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/project/airflow/dags
+      ML_HOME: /opt/airflow/project
+      PYTHONPATH: /opt/airflow/project/src
+      _PIP_ADDITIONAL_REQUIREMENTS: "pandas scikit-learn joblib requests"
+    volumes:
+      - ./:/opt/airflow/project

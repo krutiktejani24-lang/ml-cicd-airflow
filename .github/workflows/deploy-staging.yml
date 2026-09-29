@@ -1,0 +1,62 @@
+name: Deploy to Staging (tag)
+
+on:
+  push:
+    tags: ["v*"]          # e.g. git tag v1.0.0 && git push origin v1.0.0
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Train model and promote it for packaging
+        env:
+          PYTHONPATH: src
+        run: python -m mlpipeline.cli all --force-deploy
+
+      - name: Compute image name
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.ref_name }}
+            ${{ env.IMAGE }}:staging
+
+      - name: Deploy to staging (run container)
+        run: |
+          docker run -d --name staging-app -p 8000:8000 "$IMAGE:staging"
+          # Real server example (needs secrets STAGING_HOST / STAGING_SSH_KEY):
+          # ssh user@$STAGING_HOST "docker pull $IMAGE:staging && docker compose up -d"
+
+      - name: Smoke test staging
+        run: |
+          for i in $(seq 1 20); do
+            curl -fs http://localhost:8000/health && break || sleep 2
+          done
+          curl -fs http://localhost:8000/health
+          curl -fs -X POST http://localhost:8000/predict \
+            -H "Content-Type: application/json" \
+            -d '{"features": [5.1, 3.5, 1.4, 0.2]}'

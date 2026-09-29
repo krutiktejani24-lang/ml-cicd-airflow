@@ -1,0 +1,7 @@
+.git
+.github
+data
+tests
+airflow
+docs
+__pycache__
